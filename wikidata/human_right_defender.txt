@@ -1,0 +1,25 @@
+SELECT
+  ?person
+  ?personLabel
+  ?birthDate
+  (YEAR(?birthDate) AS ?birthYear)
+  ?deathDate
+  ?citizenshipLabel
+WHERE {
+  # Person
+  ?person wdt:P31 wd:Q5 .
+
+  # Occupation: human rights defender
+  ?person wdt:P106 wd:Q1476215 .
+
+  # Dates
+  OPTIONAL { ?person wdt:P569 ?birthDate . }
+  OPTIONAL { ?person wdt:P570 ?deathDate . }
+
+  # Citizenship
+  OPTIONAL { ?person wdt:P27 ?citizenship . }
+
+  SERVICE wikibase:label {
+    bd:serviceParam wikibase:language "en".
+  }
+}

@@ -1,0 +1,43 @@
+SELECT
+  ?item
+  ?itemLabel
+  ?instanceLabel
+  ?subclassLabel
+  ?birthDate
+  ?inceptionDate
+  ?startTime
+  ?pointInTime
+  ?publicationDate
+  ?mainYear
+  ?countryLabel
+  ?citizenshipLabel
+WHERE {
+  ?item wdt:P5008 wd:Q13382529 .
+
+  OPTIONAL { ?item wdt:P31 ?instance . }
+  OPTIONAL { ?item wdt:P279 ?subclass . }
+
+  OPTIONAL { ?item wdt:P569 ?birthDate . }
+  OPTIONAL { ?item wdt:P571 ?inceptionDate . }
+  OPTIONAL { ?item wdt:P580 ?startTime . }
+  OPTIONAL { ?item wdt:P585 ?pointInTime . }
+  OPTIONAL { ?item wdt:P577 ?publicationDate . }
+
+  OPTIONAL { ?item wdt:P17 ?country . }
+  OPTIONAL { ?item wdt:P27 ?citizenship . }
+
+  # Date principale
+  BIND(
+    COALESCE(?birthDate, ?inceptionDate, ?startTime, ?pointInTime, ?publicationDate)
+    AS ?mainDate
+  )
+  FILTER(BOUND(?mainDate))
+
+  # Année uniquement
+  BIND(YEAR(?mainDate) AS ?mainYear)
+
+  SERVICE wikibase:label {
+    bd:serviceParam wikibase:language "en".
+  }
+}
+ORDER BY ASC(?mainYear)
