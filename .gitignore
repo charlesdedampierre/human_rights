@@ -3,6 +3,17 @@
 venv/
 env/
 
+# Environment variables (secrets)
+.env
+
+*.csv
+*.db
+*.json
+*.xml
+*.pdf
+*.html
+*.gz
+
 # Python
 __pycache__/
 *.py[cod]
@@ -30,6 +41,15 @@ Thumbs.db
 
 # Large data files
 data/V-Dem-CY-FullOthers-v15_csv/
+*.bz2
+*.txt
+frist_test_notebooks/
+hathitrust_data/hathitrustPDF/
+*.tsv
+
+# Large notebooks with outputs
+wikisource_dump/read_fr_wikisource.ipynb
+wikisource_dump/wikisource_dump.ipynb
 
 # Logs
 *.log
