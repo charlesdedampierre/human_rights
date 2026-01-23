@@ -72,10 +72,34 @@ LABELS = {
 
 # Property categories
 CATEGORIES = {
-    "date": ["P577", "P571", "P580", "P582", "P585", "P1191", "P1319", "P1326", "P2031", "P2032", "P3893", "P1249"],
+    "date": [
+        "P577",
+        "P571",
+        "P580",
+        "P582",
+        "P585",
+        "P1191",
+        "P1319",
+        "P1326",
+        "P2031",
+        "P2032",
+        "P3893",
+        "P1249",
+    ],
     "place": ["P495", "P17", "P291", "P840", "P131", "P276", "P1001"],
     "types": ["P31", "P136", "P7937", "P282", "P2551", "P407", "P364", "P135", "P921"],
-    "content": ["P953", "P1433", "P1343", "P973", "P856", "P18", "P996", "P1476", "P1680", "P6216"],
+    "content": [
+        "P953",
+        "P1433",
+        "P1343",
+        "P973",
+        "P856",
+        "P18",
+        "P996",
+        "P1476",
+        "P1680",
+        "P6216",
+    ],
     "creators": ["P50", "P2093", "P1779", "P98", "P655", "P170", "P123"],
     "relationships": ["P361", "P144", "P179", "P155", "P156"],
 }
@@ -149,8 +173,12 @@ def analyze():
         pct = count / total_items * 100
         print(f"{cat.upper():<20} {count:>10,} {pct:>9.1f}%")
     print("-" * 70)
-    print(f"{'Sitelinks':<20} {has_sitelinks:>10,} {has_sitelinks/total_items*100:>9.1f}%")
-    print(f"{'Identifiers':<20} {has_identifiers:>10,} {has_identifiers/total_items*100:>9.1f}%")
+    print(
+        f"{'Sitelinks':<20} {has_sitelinks:>10,} {has_sitelinks/total_items*100:>9.1f}%"
+    )
+    print(
+        f"{'Identifiers':<20} {has_identifiers:>10,} {has_identifiers/total_items*100:>9.1f}%"
+    )
 
     # Print results
     print("\n" + "=" * 70)
@@ -192,7 +220,9 @@ def analyze():
         print(f"{sl_type:<30} {count:>10,} {pct:>9.1f}%")
 
     print("-" * 70)
-    print(f"{'Items with any sitelink':<30} {has_sitelinks:>10,} {has_sitelinks/total_items*100:>9.1f}%")
+    print(
+        f"{'Items with any sitelink':<30} {has_sitelinks:>10,} {has_sitelinks/total_items*100:>9.1f}%"
+    )
 
     print("\n" + "=" * 70)
     print("TOP 20 IDENTIFIERS")
@@ -205,7 +235,9 @@ def analyze():
         print(f"{prop:<10} {label:<35} {count:>10,} {pct:>9.1f}%")
 
     print("-" * 70)
-    print(f"{'Items with any identifier':<46} {has_identifiers:>10,} {has_identifiers/total_items*100:>9.1f}%")
+    print(
+        f"{'Items with any identifier':<46} {has_identifiers:>10,} {has_identifiers/total_items*100:>9.1f}%"
+    )
     print(f"Total identifier types: {len(identifier_counts)}")
 
     # Save to markdown file
@@ -223,12 +255,23 @@ def analyze():
             count = category_counts[cat]
             pct = count / total_items * 100
             f.write(f"| {cat.upper()} | {count:,} | {pct:.1f}% |\n")
-        f.write(f"| **Sitelinks** | {has_sitelinks:,} | {has_sitelinks/total_items*100:.1f}% |\n")
-        f.write(f"| **Identifiers** | {has_identifiers:,} | {has_identifiers/total_items*100:.1f}% |\n")
+        f.write(
+            f"| **Sitelinks** | {has_sitelinks:,} | {has_sitelinks/total_items*100:.1f}% |\n"
+        )
+        f.write(
+            f"| **Identifiers** | {has_identifiers:,} | {has_identifiers/total_items*100:.1f}% |\n"
+        )
 
         # Properties by category
         f.write("\n## Properties by Category\n")
-        for cat_name in ["date", "place", "types", "content", "creators", "relationships"]:
+        for cat_name in [
+            "date",
+            "place",
+            "types",
+            "content",
+            "creators",
+            "relationships",
+        ]:
             cat_props = CATEGORIES[cat_name]
             f.write(f"\n### {cat_name.upper()}\n\n")
             f.write("| Property | Label | Count | % |\n")
@@ -247,7 +290,9 @@ def analyze():
         for sl_type, count in sitelink_type_counts.most_common():
             pct = count / total_items * 100
             f.write(f"| {sl_type} | {count:,} | {pct:.1f}% |\n")
-        f.write(f"| **Any sitelink** | {has_sitelinks:,} | {has_sitelinks/total_items*100:.1f}% |\n")
+        f.write(
+            f"| **Any sitelink** | {has_sitelinks:,} | {has_sitelinks/total_items*100:.1f}% |\n"
+        )
 
         # Top identifiers
         f.write(f"\n## Top 20 Identifiers ({len(identifier_counts)} types total)\n\n")
@@ -256,7 +301,9 @@ def analyze():
         for (prop, label), count in identifier_counts.most_common(20):
             pct = count / total_items * 100
             f.write(f"| {prop} | {label} | {count:,} | {pct:.1f}% |\n")
-        f.write(f"| **Any identifier** | | {has_identifiers:,} | {has_identifiers/total_items*100:.1f}% |\n")
+        f.write(
+            f"| **Any identifier** | | {has_identifiers:,} | {has_identifiers/total_items*100:.1f}% |\n"
+        )
 
     print(f"\n>>> Report saved to: {md_file}")
 

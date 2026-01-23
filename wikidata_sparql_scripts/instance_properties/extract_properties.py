@@ -6,10 +6,18 @@ Features:
 - Multiprocessing (parallel SPARQL queries)
 - Incremental JSON saving (resume capability)
 - Automatic restart on failure with exponential backoff
+- Real-time status monitoring (status.json)
+- Error tracking (errors.json)
+- ETA calculation
 
 Estimates for 4M items:
 - Storage: ~16 GB
 - Time: ~5 days (3 workers) or ~2.5 days (6 workers)
+
+Monitoring:
+- tail -f output/extraction.log  # Live log
+- cat output/status.json         # Current progress
+- cat output/errors.json         # Failed items
 """
 
 import json
@@ -18,11 +26,21 @@ import requests
 import time
 import os
 import random
+import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import logging
 import traceback
 from tqdm import tqdm
+from threading import Lock
+
+# Optional: psutil for system monitoring (pip install psutil)
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 # =============================================================================
 # CONFIGURATION
@@ -32,12 +50,17 @@ WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 INSTANCES_DIR = "../instances/output/instances_by_class"
 OUTPUT_DIR = "output/extracted"
 LOG_FILE = "output/extraction.log"
+STATUS_FILE = "output/status.json"
+ERRORS_FILE = "output/errors.json"
 
 BATCH_SIZE = 50
 NUM_WORKERS = 8
 MAX_RETRIES = 5
-LIMIT = 100000  # Set to integer for testing, None for full extraction
+LIMIT = 10000  # Set to integer for testing, None for full extraction
 SAMPLE = True  # If True, randomly sample LIMIT items from full dataset
+
+# Status update frequency (seconds)
+STATUS_UPDATE_INTERVAL = 30
 
 # =============================================================================
 # LOGGING SETUP
@@ -54,6 +77,175 @@ logging.basicConfig(
     ],
 )
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# STATUS TRACKER
+# =============================================================================
+
+class StatusTracker:
+    """Track and persist extraction status for monitoring."""
+
+    def __init__(self, total_items: int, total_batches: int):
+        self.total_items = total_items
+        self.total_batches = total_batches
+        self.completed_items = 0
+        self.completed_batches = 0
+        self.failed_batches = 0
+        self.errors = []
+        self.start_time = time.time()
+        self.last_update = 0
+        self.lock = Lock()
+
+        # Initialize status file
+        self._save_status()
+        self._save_errors()
+
+    def update(self, items_added: int, batch_success: bool = True, error_info: dict = None):
+        """Update progress and save status."""
+        with self.lock:
+            if batch_success:
+                self.completed_items += items_added
+                self.completed_batches += 1
+            else:
+                self.failed_batches += 1
+                if error_info:
+                    error_info["timestamp"] = datetime.now().isoformat()
+                    self.errors.append(error_info)
+                    self._save_errors()
+
+            # Save status periodically (not on every update to reduce I/O)
+            now = time.time()
+            if now - self.last_update >= STATUS_UPDATE_INTERVAL:
+                self._save_status()
+                self.last_update = now
+
+    def force_save(self):
+        """Force save current status (call at end or on error)."""
+        with self.lock:
+            self._save_status()
+            self._save_errors()
+
+    def _get_eta(self):
+        """Calculate estimated time of completion."""
+        elapsed = time.time() - self.start_time
+        if self.completed_items == 0:
+            return None
+
+        rate = self.completed_items / elapsed  # items per second
+        remaining_items = self.total_items - self.completed_items
+        remaining_seconds = remaining_items / rate if rate > 0 else 0
+
+        eta = datetime.now() + timedelta(seconds=remaining_seconds)
+        return eta.isoformat()
+
+    def _get_system_stats(self):
+        """Get current system resource usage."""
+        stats = {}
+        try:
+            disk = shutil.disk_usage(OUTPUT_DIR)
+            stats["disk_free_gb"] = round(disk.free / (1024**3), 2)
+            stats["disk_percent_used"] = round((disk.used / disk.total) * 100, 1)
+
+            if PSUTIL_AVAILABLE:
+                memory = psutil.virtual_memory()
+                stats["memory_used_gb"] = round(memory.used / (1024**3), 2)
+                stats["memory_percent"] = memory.percent
+        except Exception:
+            pass
+        return stats
+
+    def _save_status(self):
+        """Save current status to JSON file."""
+        elapsed = time.time() - self.start_time
+        rate = self.completed_items / elapsed if elapsed > 0 else 0
+
+        status = {
+            "status": "running",
+            "started_at": datetime.fromtimestamp(self.start_time).isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "progress": {
+                "completed_items": self.completed_items,
+                "total_items": self.total_items,
+                "percent_complete": round((self.completed_items / self.total_items) * 100, 2) if self.total_items > 0 else 0,
+                "completed_batches": self.completed_batches,
+                "total_batches": self.total_batches,
+                "failed_batches": self.failed_batches,
+            },
+            "performance": {
+                "elapsed_seconds": round(elapsed, 1),
+                "elapsed_human": str(timedelta(seconds=int(elapsed))),
+                "items_per_second": round(rate, 2),
+                "items_per_hour": round(rate * 3600, 0),
+            },
+            "eta": self._get_eta(),
+            "system": self._get_system_stats(),
+            "error_count": len(self.errors),
+        }
+
+        try:
+            with open(STATUS_FILE, "w") as f:
+                json.dump(status, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save status: {e}")
+
+    def _save_errors(self):
+        """Save errors to separate JSON file."""
+        try:
+            with open(ERRORS_FILE, "w") as f:
+                json.dump({
+                    "total_errors": len(self.errors),
+                    "errors": self.errors[-100:]  # Keep last 100 errors
+                }, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save errors: {e}")
+
+    def log_progress(self):
+        """Log current progress to console/file."""
+        elapsed = time.time() - self.start_time
+        rate = self.completed_items / elapsed if elapsed > 0 else 0
+        percent = (self.completed_items / self.total_items) * 100 if self.total_items > 0 else 0
+        eta = self._get_eta()
+
+        logger.info(
+            f"PROGRESS: {self.completed_items:,}/{self.total_items:,} items "
+            f"({percent:.1f}%) | {rate:.1f} items/s | "
+            f"Batches: {self.completed_batches}/{self.total_batches} | "
+            f"Errors: {self.failed_batches} | "
+            f"ETA: {eta or 'calculating...'}"
+        )
+
+    def finalize(self, success: bool = True):
+        """Mark extraction as complete and save final status."""
+        with self.lock:
+            elapsed = time.time() - self.start_time
+            rate = self.completed_items / elapsed if elapsed > 0 else 0
+
+            status = {
+                "status": "completed" if success else "failed",
+                "started_at": datetime.fromtimestamp(self.start_time).isoformat(),
+                "completed_at": datetime.now().isoformat(),
+                "progress": {
+                    "completed_items": self.completed_items,
+                    "total_items": self.total_items,
+                    "percent_complete": round((self.completed_items / self.total_items) * 100, 2) if self.total_items > 0 else 0,
+                    "completed_batches": self.completed_batches,
+                    "total_batches": self.total_batches,
+                    "failed_batches": self.failed_batches,
+                },
+                "performance": {
+                    "total_seconds": round(elapsed, 1),
+                    "total_time_human": str(timedelta(seconds=int(elapsed))),
+                    "average_items_per_second": round(rate, 2),
+                },
+                "error_count": len(self.errors),
+            }
+
+            try:
+                with open(STATUS_FILE, "w") as f:
+                    json.dump(status, f, indent=2)
+            except Exception as e:
+                logger.warning(f"Failed to save final status: {e}")
 
 # =============================================================================
 # PROPERTY DEFINITIONS
@@ -345,9 +537,14 @@ def save_incremental(all_data, output_file):
 
 
 def main():
-    """Main extraction with resumption."""
+    """Main extraction with resumption and monitoring."""
     logger.info("=" * 80)
     logger.info("WIKIDATA PROPERTY EXTRACTION")
+    logger.info("=" * 80)
+    logger.info(f"Monitor progress with:")
+    logger.info(f"  tail -f {LOG_FILE}      # Live log")
+    logger.info(f"  cat {STATUS_FILE}       # Current status")
+    logger.info(f"  cat {ERRORS_FILE}       # Failed items")
     logger.info("=" * 80)
 
     # Create output directory
@@ -396,6 +593,10 @@ def main():
         instance_ids = all_instances
         logger.info(f"Extracting all {len(instance_ids):,} instances")
 
+    if len(instance_ids) == 0:
+        logger.info("No new instances to extract. Exiting.")
+        return
+
     # Create batches
     batches = []
     for i in range(0, len(instance_ids), BATCH_SIZE):
@@ -405,78 +606,86 @@ def main():
     total_batches = len(batches)
     logger.info(f"Processing {total_batches} batches with {NUM_WORKERS} workers")
 
+    # Initialize status tracker
+    status_tracker = StatusTracker(total_items=len(instance_ids), total_batches=total_batches)
+
     # Process batches with ThreadPoolExecutor
-    start_time = time.time()
-    completed_batches = 0
-    completed_items = len(all_data)
+    try:
+        with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+            # Submit all batches
+            future_to_batch = {}
+            skipped = 0
+            for batch_ids, batch_num in batches:
+                # Check if batch items already extracted
+                if all(bid in all_data for bid in batch_ids):
+                    skipped += 1
+                    continue
 
-    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
-        # Submit all batches
-        future_to_batch = {}
-        skipped = 0
-        for batch_ids, batch_num in batches:
-            # Check if batch items already extracted
-            if all(bid in all_data for bid in batch_ids):
-                skipped += 1
-                continue
+                future = executor.submit(extract_batch, batch_ids, batch_num)
+                future_to_batch[future] = (batch_ids, batch_num)
 
-            future = executor.submit(extract_batch, batch_ids, batch_num)
-            future_to_batch[future] = (batch_ids, batch_num)
+            if skipped > 0:
+                logger.info(f"Skipped {skipped} already extracted batches")
+                # Adjust tracker for already completed items
+                status_tracker.completed_items = len(all_data)
+                status_tracker.completed_batches = skipped
 
-        if skipped > 0:
-            logger.info(f"Skipped {skipped} already extracted batches")
+            # Process completed batches
+            progress_log_counter = 0
+            for future in as_completed(future_to_batch):
+                batch_ids, batch_num = future_to_batch[future]
+                try:
+                    results = future.result()
 
-        # Process completed batches with tqdm
-        pbar = tqdm(
-            as_completed(future_to_batch),
-            total=len(future_to_batch),
-            desc="Extracting",
-            unit="batch",
-            file=open(LOG_FILE, "a"),
-            ncols=80,
-        )
+                    # Merge results
+                    items_added = 0
+                    for item_id, data in results.items():
+                        if item_id not in all_data:
+                            items_added += 1
+                        all_data[item_id] = data
 
-        for future in pbar:
-            batch_ids, batch_num = future_to_batch[future]
-            try:
-                results = future.result()
+                    # Update tracker
+                    status_tracker.update(items_added=items_added, batch_success=True)
 
-                # Merge results
-                for item_id, data in results.items():
-                    all_data[item_id] = data
+                    # Save incrementally
+                    save_incremental(all_data, output_file)
 
-                completed_batches += 1
-                completed_items = len(all_data)
+                    # Log progress every 10 batches
+                    progress_log_counter += 1
+                    if progress_log_counter % 10 == 0:
+                        status_tracker.log_progress()
 
-                # Update progress bar description
-                elapsed = time.time() - start_time
-                rate = completed_items / elapsed if elapsed > 0 else 0
-                pbar.set_postfix({
-                    "items": completed_items,
-                    "rate": f"{rate:.1f}/s"
-                })
+                except Exception as e:
+                    error_info = {
+                        "batch_num": batch_num,
+                        "batch_ids": batch_ids[:5],  # First 5 IDs for reference
+                        "error": str(e),
+                        "traceback": traceback.format_exc()
+                    }
+                    status_tracker.update(items_added=0, batch_success=False, error_info=error_info)
+                    logger.error(f"  [Batch {batch_num}] FAILED: {e}")
 
-                # Save incrementally
-                save_incremental(all_data, output_file)
+                # Small delay between batch completions
+                time.sleep(1)
 
-                # Log progress periodically
-                if completed_batches % 10 == 0:
-                    logger.info(f"Progress: {completed_batches}/{total_batches} batches, {completed_items} items, {rate:.1f} items/s")
+        # Finalize
+        status_tracker.finalize(success=True)
 
-            except Exception as e:
-                logger.error(f"  [Batch {batch_num}] FAILED: {e}")
-                logger.error(traceback.format_exc())
+    except KeyboardInterrupt:
+        logger.warning("Interrupted by user! Saving progress...")
+        status_tracker.force_save()
+        save_incremental(all_data, output_file)
+        raise
 
-            # Small delay between batch completions
-            time.sleep(1)
+    except Exception as e:
+        logger.error(f"Critical error: {e}")
+        status_tracker.finalize(success=False)
+        raise
 
-        pbar.close()
-
-    elapsed = time.time() - start_time
+    # Final summary
     logger.info("\n" + "=" * 80)
-    logger.info(f"EXTRACTION COMPLETE")
+    logger.info("EXTRACTION COMPLETE")
     logger.info(f"  Total items: {len(all_data)}")
-    logger.info(f"  Time: {elapsed:.1f}s ({elapsed/len(instance_ids):.2f}s per item)")
     logger.info(f"  Output: {output_file}")
     logger.info("=" * 80)
 
@@ -493,6 +702,7 @@ def main():
     logger.info(f"  Total identifiers: {total_identifiers}")
     logger.info(f"  Total sitelinks: {total_sitelinks}")
     logger.info(f"  Wikisource links: {wikisource_count}")
+    logger.info(f"\nFinal status saved to: {STATUS_FILE}")
 
 
 if __name__ == "__main__":
