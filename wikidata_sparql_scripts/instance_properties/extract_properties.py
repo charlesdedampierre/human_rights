@@ -47,11 +47,11 @@ except ImportError:
 # =============================================================================
 
 WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
-INSTANCES_DIR = "../instances/output/instances_by_class"
-OUTPUT_DIR = "output/extracted"
-LOG_FILE = "output/extraction.log"
-STATUS_FILE = "output/status.json"
-ERRORS_FILE = "output/errors.json"
+INSTANCES_FILE = "../instances/output/all_pre1900_instance_ids.json"
+OUTPUT_DIR = "/mnt/data/extracted"
+LOG_FILE = "/mnt/data/extraction.log"
+STATUS_FILE = "/mnt/data/status.json"
+ERRORS_FILE = "/mnt/data/errors.json"
 
 BATCH_SIZE = 50
 NUM_WORKERS = 8
@@ -66,7 +66,7 @@ STATUS_UPDATE_INTERVAL = 30
 # LOGGING SETUP
 # =============================================================================
 
-os.makedirs("output", exist_ok=True)
+os.makedirs("/mnt/data", exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -562,21 +562,21 @@ def main():
         all_data = {}
         already_extracted = set()
 
-    # Get instance IDs from class files
-    class_files = sorted(glob.glob(f"{INSTANCES_DIR}/*.json"), key=lambda x: Path(x).stat().st_size)
+    # Get instance IDs from single file
+    script_dir = Path(__file__).parent
+    instances_path = script_dir / INSTANCES_FILE
 
-    if not class_files:
-        logger.error("No class files found!")
+    if not instances_path.exists():
+        logger.error(f"Instances file not found: {instances_path}")
         return
 
-    # Collect all instances
-    logger.info("Loading all instances...")
-    all_instances = []
-    for class_file in class_files:
-        with open(class_file) as f:
-            instances = json.load(f)
-        new_instances = [i for i in instances if i not in already_extracted]
-        all_instances.extend(new_instances)
+    # Load all instances
+    logger.info(f"Loading instances from {instances_path}...")
+    with open(instances_path) as f:
+        all_instances_raw = json.load(f)
+
+    # Filter out already extracted and keep only Q-items (skip L and P items)
+    all_instances = [i for i in all_instances_raw if i not in already_extracted and i.startswith("Q")]
 
     logger.info(f"Total available instances: {len(all_instances):,}")
 
