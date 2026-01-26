@@ -48,25 +48,29 @@ except ImportError:
 
 WIKIDATA_SPARQL_ENDPOINT = "https://query.wikidata.org/sparql"
 INSTANCES_FILE = "../instances/output/all_pre1900_instance_ids.json"
-OUTPUT_DIR = "/mnt/data/extracted"
-LOG_FILE = "/mnt/data/extraction.log"
-STATUS_FILE = "/mnt/data/status.json"
-ERRORS_FILE = "/mnt/data/errors.json"
 
-BATCH_SIZE = 50
-NUM_WORKERS = 8
+# Local paths (relative to script directory)
+SCRIPT_DIR = Path(__file__).parent
+OUTPUT_DIR = SCRIPT_DIR / "output"
+LOG_FILE = OUTPUT_DIR / "extraction.log"
+STATUS_FILE = OUTPUT_DIR / "status.json"
+ERRORS_FILE = OUTPUT_DIR / "errors.json"
+
+BATCH_SIZE = 350  # Larger batches (POST handles this)
+NUM_WORKERS = 8  # Balance speed vs rate limits
+SAVE_EVERY_N_BATCHES = 10  # Save less frequently
 MAX_RETRIES = 5
-LIMIT = 10000  # Set to integer for testing, None for full extraction
-SAMPLE = True  # If True, randomly sample LIMIT items from full dataset
+LIMIT = None  # None for full extraction
+SAMPLE = False  # No sampling, extract all remaining
 
 # Status update frequency (seconds)
-STATUS_UPDATE_INTERVAL = 30
+STATUS_UPDATE_INTERVAL = 10  # Save status every 10 seconds
 
 # =============================================================================
 # LOGGING SETUP
 # =============================================================================
 
-os.makedirs("/mnt/data", exist_ok=True)
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -86,10 +90,12 @@ logger = logging.getLogger(__name__)
 class StatusTracker:
     """Track and persist extraction status for monitoring."""
 
-    def __init__(self, total_items: int, total_batches: int):
-        self.total_items = total_items
+    def __init__(self, total_items: int, total_batches: int, already_extracted: int = 0, grand_total: int = None):
+        self.total_items = total_items  # Items remaining to extract
         self.total_batches = total_batches
-        self.completed_items = 0
+        self.completed_items = 0  # Items extracted this session
+        self.already_extracted = already_extracted  # Items from previous runs
+        self.grand_total = grand_total or (total_items + already_extracted)  # Total including previous
         self.completed_batches = 0
         self.failed_batches = 0
         self.errors = []
@@ -160,14 +166,19 @@ class StatusTracker:
         elapsed = time.time() - self.start_time
         rate = self.completed_items / elapsed if elapsed > 0 else 0
 
+        # Cumulative counts (previous + current session)
+        total_extracted = self.already_extracted + self.completed_items
+
         status = {
             "status": "running",
             "started_at": datetime.fromtimestamp(self.start_time).isoformat(),
             "last_updated": datetime.now().isoformat(),
             "progress": {
-                "completed_items": self.completed_items,
-                "total_items": self.total_items,
-                "percent_complete": round((self.completed_items / self.total_items) * 100, 2) if self.total_items > 0 else 0,
+                "completed_items": total_extracted,  # Cumulative total
+                "total_items": self.grand_total,  # Grand total including previous
+                "percent_complete": round((total_extracted / self.grand_total) * 100, 2) if self.grand_total > 0 else 0,
+                "session_items": self.completed_items,  # This session only
+                "previously_extracted": self.already_extracted,
                 "completed_batches": self.completed_batches,
                 "total_batches": self.total_batches,
                 "failed_batches": self.failed_batches,
@@ -312,19 +323,20 @@ MAIN_PROPERTIES = {
 
 
 def query_sparql_with_retry(query, max_retries=MAX_RETRIES):
-    """Execute SPARQL query with exponential backoff retry."""
+    """Execute SPARQL query with exponential backoff retry using POST."""
     headers = {
         "Accept": "application/sparql-results+json",
         "User-Agent": "WikidataExtraction/1.0 (Research Project)",
+        "Content-Type": "application/x-www-form-urlencoded",
     }
 
     wait_time = 2
     for attempt in range(max_retries):
         try:
-            time.sleep(1)  # Base rate limiting
-            response = requests.get(
+            time.sleep(0.1)  # Minimal rate limiting
+            response = requests.post(
                 WIKIDATA_SPARQL_ENDPOINT,
-                params={"query": query},
+                data={"query": query},
                 headers=headers,
                 timeout=120,
             )
@@ -472,7 +484,7 @@ def extract_batch(batch_ids, batch_num):
                         results[item_id]["properties"][prop_id]["values"].append(prop_data)
 
     # Extract identifiers
-    time.sleep(0.5)  # Small delay between queries
+    time.sleep(0.05)  # Minimal delay between queries
     query = build_identifiers_query(batch_ids)
     id_result = query_sparql_with_retry(query)
 
@@ -530,9 +542,14 @@ def extract_batch(batch_ids, batch_num):
 
 
 def save_incremental(all_data, output_file):
-    """Save data incrementally to JSON file."""
-    with open(output_file, "w") as f:
+    """Save data atomically to JSON file (write to temp, then rename)."""
+    temp_file = str(output_file) + ".tmp"
+    with open(temp_file, "w") as f:
         json.dump(all_data, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())  # Force write to disk
+    # Atomic rename - won't corrupt the main file if interrupted
+    os.replace(temp_file, output_file)
     logger.info(f"  Saved {len(all_data)} items to {output_file}")
 
 
@@ -548,11 +565,10 @@ def main():
     logger.info("=" * 80)
 
     # Create output directory
-    output_dir = Path(OUTPUT_DIR)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load existing data (for resume capability)
-    output_file = output_dir / "extracted_data.json"
+    output_file = OUTPUT_DIR / "extracted_data.json"
     if output_file.exists():
         with open(output_file) as f:
             all_data = json.load(f)
@@ -575,10 +591,16 @@ def main():
     with open(instances_path) as f:
         all_instances_raw = json.load(f)
 
+    # Count total Q-items (for grand total calculation)
+    total_q_items = sum(1 for i in all_instances_raw if i.startswith("Q"))
+    num_already_extracted = len(already_extracted)
+
     # Filter out already extracted and keep only Q-items (skip L and P items)
     all_instances = [i for i in all_instances_raw if i not in already_extracted and i.startswith("Q")]
 
-    logger.info(f"Total available instances: {len(all_instances):,}")
+    logger.info(f"Grand total Q-items: {total_q_items:,}")
+    logger.info(f"Already extracted: {num_already_extracted:,}")
+    logger.info(f"Remaining to extract: {len(all_instances):,}")
 
     # Apply limit (with optional random sampling)
     if LIMIT and len(all_instances) > LIMIT:
@@ -606,8 +628,13 @@ def main():
     total_batches = len(batches)
     logger.info(f"Processing {total_batches} batches with {NUM_WORKERS} workers")
 
-    # Initialize status tracker
-    status_tracker = StatusTracker(total_items=len(instance_ids), total_batches=total_batches)
+    # Initialize status tracker with cumulative counts
+    status_tracker = StatusTracker(
+        total_items=len(instance_ids),
+        total_batches=total_batches,
+        already_extracted=num_already_extracted,
+        grand_total=total_q_items
+    )
 
     # Process batches with ThreadPoolExecutor
     try:
@@ -647,11 +674,13 @@ def main():
                     # Update tracker
                     status_tracker.update(items_added=items_added, batch_success=True)
 
-                    # Save incrementally
-                    save_incremental(all_data, output_file)
-
                     # Log progress every 10 batches
                     progress_log_counter += 1
+
+                    # Save every N batches (less disk I/O)
+                    if progress_log_counter % SAVE_EVERY_N_BATCHES == 0:
+                        save_incremental(all_data, output_file)
+
                     if progress_log_counter % 10 == 0:
                         status_tracker.log_progress()
 
@@ -666,7 +695,7 @@ def main():
                     logger.error(f"  [Batch {batch_num}] FAILED: {e}")
 
                 # Small delay between batch completions
-                time.sleep(1)
+                time.sleep(0.2)
 
         # Finalize
         status_tracker.finalize(success=True)

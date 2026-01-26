@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""
+This script writes raw machine code bytes directly to a file.
+No C compiler involved - just hex bytes written to disk.
+"""
+
+# Every byte here is hand-written machine code
+machine_code = bytes([
+    # === MACH-O HEADER (32 bytes) ===
+    0xcf, 0xfa, 0xed, 0xfe,  # Magic number: "This is a Mach-O 64-bit file"
+    0x0c, 0x00, 0x00, 0x01,  # CPU type: ARM64
+    0x00, 0x00, 0x00, 0x00,  # CPU subtype
+    0x02, 0x00, 0x00, 0x00,  # File type: executable
+    0x0d, 0x00, 0x00, 0x00,  # Number of load commands: 13
+    0xe8, 0x03, 0x00, 0x00,  # Size of load commands: 1000 bytes
+    0x85, 0x00, 0x20, 0x00,  # Flags
+    0x00, 0x00, 0x00, 0x00,  # Reserved
+    
+    # === LC_SEGMENT_64 __PAGEZERO (72 bytes) ===
+    0x19, 0x00, 0x00, 0x00,  # LC_SEGMENT_64
+    0x48, 0x00, 0x00, 0x00,  # Command size: 72
+    0x5f, 0x5f, 0x50, 0x41, 0x47, 0x45, 0x5a, 0x45,  # "__PAGEZE"
+    0x52, 0x4f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  # "RO\0\0\0\0\0\0"
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  # vmaddr: 0
+    0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,  # vmsize: 0x100000000
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  # fileoff: 0
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,  # filesize: 0
+    0x00, 0x00, 0x00, 0x00,  # maxprot: 0
+    0x00, 0x00, 0x00, 0x00,  # initprot: 0
+    0x00, 0x00, 0x00, 0x00,  # nsects: 0
+    0x00, 0x00, 0x00, 0x00,  # flags: 0
+    
+    # ... (would need ~1000 more bytes of headers)
+    # ... (then ~5000 bytes of actual CPU instructions)
+])
+
+print("Machine code bytes written by hand:")
+print("-" * 50)
+for i in range(0, min(len(machine_code), 104), 16):
+    hex_part = ' '.join(f'{b:02x}' for b in machine_code[i:i+16])
+    ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in machine_code[i:i+16])
+    print(f"{i:08x}: {hex_part:<48} {ascii_part}")
+
+print("-" * 50)
+print(f"Total bytes shown: {len(machine_code)}")
+print(f"Bytes needed for full program: ~34,000")
+print()
+print("This is what a machine code file looks like - just raw bytes.")
+print("The CPU reads these bytes directly and executes them.")

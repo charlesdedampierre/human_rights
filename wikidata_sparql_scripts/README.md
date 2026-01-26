@@ -13,10 +13,12 @@ instance_properties/ → Extract detailed properties for each instance
 ## Instance Extraction
 
 ### Included Classes
+
 - 2,661 classes from Wikidata subclasses of "written work"
 - ~3.8 million unique instances (pre-1900)
 
 ### Excluded Classes
+
 The following classes are excluded from property extraction:
 
 | QID | Class Name | Reason | Count |

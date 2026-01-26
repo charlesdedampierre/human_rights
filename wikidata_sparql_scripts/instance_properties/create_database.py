@@ -20,10 +20,11 @@ import json
 import sqlite3
 import re
 from pathlib import Path
+from tqdm import tqdm
 
 # Paths
 SCRIPT_DIR = Path(__file__).parent
-JSON_PATH = SCRIPT_DIR / "output" / "extracted" / "extracted_data.json"
+BATCHES_DIR = SCRIPT_DIR / "output" / "extracted_batches"
 DB_PATH = SCRIPT_DIR / "output" / "instance_properties.db"
 
 # Property categories
@@ -188,9 +189,20 @@ def create_category_table(cursor, data, table_name, properties_dict):
 
 
 def main():
-    print(f"Loading JSON data from {JSON_PATH}...")
-    with open(JSON_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    # Load all batch files from extracted_batches directory
+    batch_files = sorted(BATCHES_DIR.glob("extracted_data_*.json"))
+    if not batch_files:
+        print(f"No batch files found in {BATCHES_DIR}")
+        return
+
+    print(f"Found {len(batch_files)} batch files in {BATCHES_DIR}")
+
+    # Merge all batches into single data dictionary
+    data = {}
+    for batch_file in tqdm(batch_files, desc="Loading batch files"):
+        with open(batch_file, "r", encoding="utf-8") as f:
+            batch_data = json.load(f)
+            data.update(batch_data)
 
     print(f"Total instances: {len(data):,}")
 
@@ -210,8 +222,9 @@ def main():
     print(f"Dropped {len(existing_tables)} existing tables")
 
     # Collect property labels from data
+    print("\nCollecting property labels...")
     property_labels_from_data = {}
-    for instance_id, instance_data in data.items():
+    for instance_id, instance_data in tqdm(data.items(), desc="Scanning properties"):
         for prop_id, prop_data in instance_data.get("properties", {}).items():
             if prop_id not in property_labels_from_data:
                 property_labels_from_data[prop_id] = prop_data.get(
@@ -289,30 +302,43 @@ def main():
         "instance_id TEXT PRIMARY KEY",
         "instance_label TEXT",
         "description TEXT",
+        "sitelinks_count INTEGER",
     ]
     for col_name in ALL_PROPERTIES.values():
         columns.append(f"{col_name} TEXT")
 
     cursor.execute(f"CREATE TABLE instances_properties ({', '.join(columns)})")
 
-    col_names = ["instance_id", "instance_label", "description"] + list(
+    col_names = ["instance_id", "instance_label", "description", "sitelinks_count"] + list(
         ALL_PROPERTIES.values()
     )
     placeholders = ", ".join(["?" for _ in col_names])
     insert_sql = f"INSERT INTO instances_properties ({', '.join(col_names)}) VALUES ({placeholders})"
 
+    # Prepare data with sitelinks count and sort by sitelinks_count descending
+    instances_with_counts = []
     for instance_id, instance_data in data.items():
+        sitelinks_count = len(instance_data.get("sitelinks", []))
+        instances_with_counts.append((instance_id, instance_data, sitelinks_count))
+
+    # Sort by sitelinks_count descending (most sitelinks first)
+    instances_with_counts.sort(key=lambda x: x[2], reverse=True)
+
+    for instance_id, instance_data, sitelinks_count in tqdm(
+        instances_with_counts, desc="Inserting instances_properties"
+    ):
         row = [
             instance_id,
             instance_data.get("label", instance_id),
             instance_data.get("description", ""),
+            sitelinks_count,
         ]
         for prop_id in ALL_PROPERTIES.keys():
             is_date = prop_id in DATE_PROPERTIES
             row.append(get_property_labels(instance_data, prop_id, is_date))
         cursor.execute(insert_sql, row)
 
-    print(f"   - {len(data):,} instances")
+    print(f"   - {len(data):,} instances (ordered by sitelinks_count desc)")
 
     # =========================================================================
     # 3. CREATE INSTANCES_CONTENT_PROPERTIES TABLE
@@ -368,7 +394,7 @@ def main():
     )
 
     sitelink_count = 0
-    for instance_id, instance_data in data.items():
+    for instance_id, instance_data in tqdm(data.items(), desc="Inserting sitelinks"):
         instance_label = instance_data.get("label", instance_id)
         for sitelink in instance_data.get("sitelinks", []):
             url = sitelink.get("url", "")
@@ -399,7 +425,7 @@ def main():
     )
 
     identifier_count = 0
-    for instance_id, instance_data in data.items():
+    for instance_id, instance_data in tqdm(data.items(), desc="Inserting identifiers"):
         instance_label = instance_data.get("label", instance_id)
         for identifier in instance_data.get("identifiers", []):
             prop = identifier.get("property", "")
@@ -435,7 +461,7 @@ def main():
         else:
             return f"prop_{col_name}"
 
-    for prop_id, col_name in ALL_PROPERTIES.items():
+    for prop_id, col_name in tqdm(ALL_PROPERTIES.items(), desc="Creating prop_* tables"):
         table_name = get_table_name(prop_id, col_name)
         cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
 
@@ -464,7 +490,9 @@ def main():
             )
 
         # Aggregate values and count unique instances per value
-        value_instances = {}  # key: (value_id, value_label) or value for dates -> set of instance_ids
+        value_instances = (
+            {}
+        )  # key: (value_id, value_label) or value for dates -> set of instance_ids
         for instance_id, instance_data in data.items():
             props = instance_data.get("properties", {})
             if prop_id not in props:
@@ -576,10 +604,10 @@ def main():
         print(row)
 
     print("\n" + "=" * 70)
-    print("SAMPLE - instances_properties (first 3)")
+    print("SAMPLE - instances_properties (first 3, ordered by sitelinks_count)")
     print("=" * 70)
     cursor.execute(
-        "SELECT instance_id, instance_label, title, author, publication_date FROM instances_properties LIMIT 3"
+        "SELECT instance_id, instance_label, sitelinks_count, title, author, publication_date FROM instances_properties LIMIT 3"
     )
     for row in cursor.fetchall():
         print(row)

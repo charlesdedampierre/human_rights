@@ -1,0 +1,1 @@
+/Users/charlesdedampierre/Desktop/Rsearch\ Folder/human_rights/wikidata_sparql_scripts/instance_properties/output/split_json_rust/target/release/split_json: /Users/charlesdedampierre/Desktop/Rsearch\ Folder/human_rights/wikidata_sparql_scripts/instance_properties/output/split_json_rust/src/main.rs
