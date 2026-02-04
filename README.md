@@ -1,34 +1,132 @@
-# Human Rights Defenders Analysis
+# Human Rights Defenders & Literary Works Analysis
 
-Estimating the historical population of human rights defenders using Wikidata and ecological species richness methods.
+Research project combining historical data on human rights defenders with large-scale literary works analysis from Wikidata.
 
-## Overview
+## Main Database
 
-This project applies the **Chao1 estimator** (a non-parametric species richness method from ecology) to estimate the total number of human rights defenders throughout history, including those not captured in historical records.
+**Location:** [`wikidata_sparql_scripts/instance_properties/output/instance_properties.db`](wikidata_sparql_scripts/instance_properties/output/instance_properties.db) (4.4 GB)
 
-We combine:
+Contains ~3.8 million pre-1900 literary works extracted from Wikidata with full metadata.
 
-- **Wikidata**: Database of human rights defenders with associated works
-- **V-Dem**: Varieties of Democracy dataset for democracy indicators
-- **Chao1 Estimator**: Statistical method to estimate unobserved population
+---
+
+## Pipeline Diagram
+
+```mermaid
+flowchart LR
+    A[Wikidata SPARQL] --> B[extract_properties.py]
+    B --> C[create_database.py]
+    C --> D[(instance_properties.db<br/>4.4 GB)]
+    D --> E[Enrichment Scripts]
+    E --> D
+    D --> F[analysis_regions.ipynb]
+    D --> G[Full Text Extraction]
+```
+
+---
+
+## Pipeline Overview
+
+### 1. Database Creation
+
+Scripts to extract and build the main database from Wikidata:
+
+| Script | Location | Description |
+|--------|----------|-------------|
+| `extract_properties.py` | `wikidata_sparql_scripts/instance_properties/` | Main extraction script (~3.8M works) |
+| `create_database.py` | `wikidata_sparql_scripts/instance_properties/` | Create SQLite database from extracted data |
+| `monitor.py` | `wikidata_sparql_scripts/instance_properties/monitor_extraction/` | Monitor extraction progress |
+
+```bash
+cd wikidata_sparql_scripts/instance_properties
+nohup python extract_properties.py > nohup.out 2>&1 &
+python monitor_extraction/monitor.py --watch  # Monitor progress
+```
+
+---
+
+### 2. Database Enrichment
+
+Scripts to enrich the database with AI-powered mappings:
+
+| Script | Location | Description |
+|--------|----------|-------------|
+| `enrich_countries_ai.py` | `database_consolidation/` | Map historical countries to modern equivalents |
+| `enrich_language_of_work_ai.py` | `database_consolidation/` | Map languages to primary countries |
+| `consolidation_dates.py` | `database_consolidation/` | Consolidate and clean date fields |
+| `create_region_mapping.py` | `database_consolidation/` | Create world region classifications |
+| `consolidation_places.py` | `database_consolidation/` | Consolidate place data |
+
+---
+
+### 3. Full Text Extraction
+
+Scripts to extract full text content from multiple sources:
+
+| Script | Location | Description |
+|--------|----------|-------------|
+| Extractors | `extract_works_full_text/extractors/` | Source-specific text extractors |
+| Scripts | `extract_works_full_text/scripts/` | Batch extraction scripts |
+| `viewer.html` | `extract_works_full_text/` | Web interface to view extracted texts |
+
+**Extraction priority (waterfall):**
+
+1. Wikisource (~36,000 works)
+2. Project Gutenberg (~116 works)
+3. Internet Archive (~3,000+ works)
+4. Open Library (~5,200 works)
+5. Gallica (~1,600 works)
+6. HathiTrust
+7. Direct URLs
+
+---
+
+### 4. Analysis
+
+Notebooks and scripts for data analysis:
+
+| File | Location | Description |
+|------|----------|-------------|
+| `analysis_regions.ipynb` | `analysis/` | Regional analysis of literary works |
+| Research documents | `research_documents/` | Papers and figures |
+
+---
 
 ## Project Structure
 
 ```
 human_rights/
-├── notebooks/
-│   ├── 01_data_extraction.ipynb    # Extract data from Wikidata
-│   ├── 02_chao1_analysis.ipynb     # Apply Chao1 estimator
-│   └── 03_vdem_analysis.ipynb      # Analyze V-Dem democracy data
-├── data/
-│   ├── human_rights_defender.csv           # Raw Wikidata export
-│   ├── human_rights_defender_clean.csv     # Cleaned data
-│   ├── chao1_results_world.csv             # Chao1 analysis results
-│   └── V-Dem-CY-FullOthers-v15_csv/        # V-Dem dataset
-├── figures/                         # Generated visualizations
-├── requirements.txt                 # Python dependencies
-└── README.md
+├── wikidata_sparql_scripts/        # DATABASE CREATION
+│   └── instance_properties/
+│       ├── extract_properties.py   # Main extraction script
+│       ├── create_database.py      # Create SQLite database
+│       ├── monitor_extraction/     # Progress monitoring
+│       └── output/
+│           └── instance_properties.db  # MAIN DATABASE (4.4 GB)
+│
+├── database_consolidation/         # DATABASE ENRICHMENT
+│   ├── enrich_countries_ai.py
+│   ├── enrich_language_of_work_ai.py
+│   ├── consolidation_dates.py
+│   ├── create_region_mapping.py
+│   └── consolidation_places.py
+│
+├── analysis/                       # ANALYSIS NOTEBOOKS
+│   └── analysis_regions.ipynb
+│
+├── extract_works_full_text/        # FULL TEXT EXTRACTION
+│   ├── extractors/
+│   ├── scripts/
+│   └── viewer.html
+│
+├── wikisource_dump/                # Wikisource data
+├── hathitrust_data/                # HathiTrust catalog
+├── data/                           # Human rights defenders data
+├── research_documents/             # Papers and figures
+└── _archive/                       # Archived files
 ```
+
+---
 
 ## Installation
 
@@ -39,61 +137,28 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# For AI enrichment, set OpenAI API key
+export OPENAI_API_KEY="your-key"
+# Or add to .env file
 ```
 
-## Usage
+---
 
-Run the notebooks in order:
+## Data Sources
 
-1. **01_data_extraction.ipynb**: Fetches works counts from Wikidata API
-2. **02_chao1_analysis.ipynb**: Applies Chao1 estimator to estimate total population
-3. **03_vdem_analysis.ipynb**: Correlates with V-Dem democracy indicators
+| Source | Coverage |
+|--------|----------|
+| Wikidata | ~3.8M pre-1900 works |
+| Wikisource | ~36,000 works |
+| Internet Archive | ~3,000+ works |
+| Open Library | ~5,200 works |
+| Gallica | ~1,600 works |
+| Project Gutenberg | ~116 works |
+| HathiTrust | Catalog data |
 
-## Methodology
-
-### Chao1 Estimator
-
-The Chao1 estimator uses the frequency of rare observations to estimate total population:
-
-```
-S_chao1 = S_obs + (f1²) / (2 × f2)
-```
-
-Where:
-
-- `S_obs` = observed number of individuals
-- `f1` = singletons (individuals with 1 work)
-- `f2` = doubletons (individuals with 2 works)
-
-### Data Sources
-
-- **Wikidata**: Human rights defenders identified via occupation/category properties
-- **V-Dem v15**: Democracy indicators from 1789-2024 for 200+ countries
-
-## Key Findings
-
-1. **Low capture rates**: Historical records capture only a small fraction of human rights defenders
-2. **Temporal variation**: Capture rates vary significantly across time periods
-3. **Democracy correlation**: Strong correlation between democracy levels and documented defenders
-
-## Requirements
-
-- Python 3.9+
-- pandas
-- numpy
-- matplotlib
-- scipy
-- jupyter
-- requests
-- tqdm
+---
 
 ## License
 
 MIT License
-
-## Citation
-
-If you use this analysis, please cite:
-
-- V-Dem Dataset: Coppedge et al. (2024). V-Dem Dataset v15
-- Wikidata: <https://www.wikidata.org>

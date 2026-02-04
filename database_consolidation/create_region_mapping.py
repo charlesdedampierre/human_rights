@@ -3,7 +3,13 @@
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "wikidata_sparql_scripts" / "instance_properties" / "output" / "instance_properties.db"
+DB_PATH = (
+    Path(__file__).parent.parent
+    / "wikidata_sparql_scripts"
+    / "instance_properties"
+    / "output"
+    / "instance_properties.db"
+)
 
 # Country to region mapping
 COUNTRY_REGION_MAPPING = {
@@ -18,7 +24,6 @@ COUNTRY_REGION_MAPPING = {
     "North Macedonia": ("Eastern Europe", "Balkans"),
     "Kosovo": ("Eastern Europe", "Balkans"),
     "Slovenia": ("Eastern Europe", "Balkans"),
-
     # Eastern Europe - Central Europe
     "Latvia": ("Eastern Europe", "Central Europe"),
     "Estonia": ("Eastern Europe", "Central Europe"),
@@ -28,46 +33,36 @@ COUNTRY_REGION_MAPPING = {
     "Czechia": ("Eastern Europe", "Central Europe"),
     "Poland": ("Eastern Europe", "Central Europe"),
     "Hungary": ("Eastern Europe", "Central Europe"),
-
     # Eastern Europe - East Slavic
     "Belarus": ("Eastern Europe", "East Slavic"),
     "Russia": ("Eastern Europe", "East Slavic"),
     "Russian Federation": ("Eastern Europe", "East Slavic"),
     "Ukraine": ("Eastern Europe", "East Slavic"),
-
     # Western Europe - British Islands
     "Ireland": ("Western Europe", "British Islands"),
     "United Kingdom": ("Western Europe", "British Islands"),
-
     # Western Europe - France
     "France": ("Western Europe", "France"),
-
     # Western Europe - German World
     "Germany": ("Western Europe", "German World"),
     "Switzerland": ("Western Europe", "German World"),
     "Austria": ("Western Europe", "German World"),
-
     # Western Europe - Portugal
     "Portugal": ("Western Europe", "Portugal"),
-
     # Western Europe - Spain
     "Spain": ("Western Europe", "Spain"),
-
     # Western Europe - Italy
     "Italy": ("Western Europe", "Italy"),
-
     # Western Europe - Low Countries
     "Netherlands": ("Western Europe", "Low Countries"),
     "Belgium": ("Western Europe", "Low Countries"),
     "Luxembourg": ("Western Europe", "Low Countries"),
-
     # Western Europe - Nordic
     "Denmark": ("Western Europe", "Nordic Countries"),
     "Norway": ("Western Europe", "Nordic Countries"),
     "Sweden": ("Western Europe", "Nordic Countries"),
     "Finland": ("Western Europe", "Nordic Countries"),
     "Iceland": ("Western Europe", "Nordic Countries"),
-
     # Middle-East and Africa (MENA) - Arabic World
     "Tunisia": ("MENA", "Arabic World"),
     "Algeria": ("MENA", "Arabic World"),
@@ -88,7 +83,6 @@ COUNTRY_REGION_MAPPING = {
     "Bahrain": ("MENA", "Arabic World"),
     "Yemen": ("MENA", "Arabic World"),
     "Qatar": ("MENA", "Arabic World"),
-
     # MENA - Persian World
     "Iran": ("MENA", "Persian World"),
     "Afghanistan": ("MENA", "Persian World"),
@@ -98,14 +92,12 @@ COUNTRY_REGION_MAPPING = {
     "Azerbaijan": ("MENA", "Persian World"),
     "Tajikistan": ("MENA", "Persian World"),
     "Kazakhstan": ("MENA", "Persian World"),
-
     # Asia - Chinese World
     "China": ("Asia", "Chinese World"),
     "Mongolia": ("Asia", "Chinese World"),
     "Taiwan": ("Asia", "Chinese World"),
     "Hong Kong": ("Asia", "Chinese World"),
     "Macau": ("Asia", "Chinese World"),
-
     # Asia - Indian World
     "India": ("Asia", "Indian World"),
     "Pakistan": ("Asia", "Indian World"),
@@ -114,15 +106,12 @@ COUNTRY_REGION_MAPPING = {
     "Nepal": ("Asia", "Indian World"),
     "Bhutan": ("Asia", "Indian World"),
     "Maldives": ("Asia", "Indian World"),
-
     # Asia - Japan
     "Japan": ("Asia", "Japan"),
-
     # Asia - Korea
     "Korea": ("Asia", "Korea"),
     "South Korea": ("Asia", "Korea"),
     "North Korea": ("Asia", "Korea"),
-
     # Asia - Southeast Asia
     "Vietnam": ("Asia", "Southeast Asia"),
     "Thailand": ("Asia", "Southeast Asia"),
@@ -136,12 +125,10 @@ COUNTRY_REGION_MAPPING = {
     "Brunei": ("Asia", "Southeast Asia"),
     "East Timor": ("Asia", "Southeast Asia"),
     "Timor-Leste": ("Asia", "Southeast Asia"),
-
     # North America
     "United States": ("Americas", "North America"),
     "United States of America": ("Americas", "North America"),
     "Canada": ("Americas", "North America"),
-
     # Central America & Caribbean
     "Mexico": ("Americas", "Central America & Caribbean"),
     "Guatemala": ("Americas", "Central America & Caribbean"),
@@ -159,7 +146,6 @@ COUNTRY_REGION_MAPPING = {
     "Trinidad and Tobago": ("Americas", "Central America & Caribbean"),
     "Bahamas": ("Americas", "Central America & Caribbean"),
     "Barbados": ("Americas", "Central America & Caribbean"),
-
     # South America
     "Brazil": ("Americas", "South America"),
     "Argentina": ("Americas", "South America"),
@@ -173,7 +159,6 @@ COUNTRY_REGION_MAPPING = {
     "Uruguay": ("Americas", "South America"),
     "Guyana": ("Americas", "South America"),
     "Suriname": ("Americas", "South America"),
-
     # Sub-Saharan Africa - West Africa
     "Nigeria": ("Sub-Saharan Africa", "West Africa"),
     "Ghana": ("Sub-Saharan Africa", "West Africa"),
@@ -192,7 +177,6 @@ COUNTRY_REGION_MAPPING = {
     "Gambia": ("Sub-Saharan Africa", "West Africa"),
     "Guinea-Bissau": ("Sub-Saharan Africa", "West Africa"),
     "Cape Verde": ("Sub-Saharan Africa", "West Africa"),
-
     # Sub-Saharan Africa - East Africa
     "Kenya": ("Sub-Saharan Africa", "East Africa"),
     "Tanzania": ("Sub-Saharan Africa", "East Africa"),
@@ -211,7 +195,6 @@ COUNTRY_REGION_MAPPING = {
     "Comoros": ("Sub-Saharan Africa", "East Africa"),
     "Malawi": ("Sub-Saharan Africa", "East Africa"),
     "Mozambique": ("Sub-Saharan Africa", "East Africa"),
-
     # Sub-Saharan Africa - Central Africa
     "Democratic Republic of the Congo": ("Sub-Saharan Africa", "Central Africa"),
     "Republic of the Congo": ("Sub-Saharan Africa", "Central Africa"),
@@ -223,7 +206,6 @@ COUNTRY_REGION_MAPPING = {
     "Equatorial Guinea": ("Sub-Saharan Africa", "Central Africa"),
     "São Tomé and Príncipe": ("Sub-Saharan Africa", "Central Africa"),
     "Angola": ("Sub-Saharan Africa", "Central Africa"),
-
     # Sub-Saharan Africa - Southern Africa
     "South Africa": ("Sub-Saharan Africa", "Southern Africa"),
     "Namibia": ("Sub-Saharan Africa", "Southern Africa"),
@@ -233,7 +215,6 @@ COUNTRY_REGION_MAPPING = {
     "Lesotho": ("Sub-Saharan Africa", "Southern Africa"),
     "Eswatini": ("Sub-Saharan Africa", "Southern Africa"),
     "Swaziland": ("Sub-Saharan Africa", "Southern Africa"),
-
     # Oceania
     "Australia": ("Oceania", "Australia & New Zealand"),
     "New Zealand": ("Oceania", "Australia & New Zealand"),
@@ -243,7 +224,6 @@ COUNTRY_REGION_MAPPING = {
     "Vanuatu": ("Oceania", "Pacific Islands"),
     "Samoa": ("Oceania", "Pacific Islands"),
     "Tonga": ("Oceania", "Pacific Islands"),
-
     # Caucasus
     "Georgia": ("Eastern Europe", "Caucasus"),
     "Armenia": ("Eastern Europe", "Caucasus"),
@@ -251,26 +231,29 @@ COUNTRY_REGION_MAPPING = {
     "Cyprus": ("MENA", "Turkey"),
 }
 
+
 def main():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # Drop and create table
     cursor.execute("DROP TABLE IF EXISTS country_region_mapping")
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE country_region_mapping (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             country TEXT UNIQUE,
             macro_region TEXT,
             region TEXT
         )
-    """)
+    """
+    )
 
     # Insert mappings
     for country, (macro_region, region) in COUNTRY_REGION_MAPPING.items():
         cursor.execute(
             "INSERT INTO country_region_mapping (country, macro_region, region) VALUES (?, ?, ?)",
-            (country, macro_region, region)
+            (country, macro_region, region),
         )
 
     conn.commit()
@@ -279,13 +262,16 @@ def main():
     cursor.execute("SELECT COUNT(*) FROM country_region_mapping")
     total = cursor.fetchone()[0]
 
-    cursor.execute("SELECT macro_region, COUNT(*) FROM country_region_mapping GROUP BY macro_region")
+    cursor.execute(
+        "SELECT macro_region, COUNT(*) FROM country_region_mapping GROUP BY macro_region"
+    )
     print(f"Created country_region_mapping with {total} countries:\n")
     for row in cursor.fetchall():
         print(f"  {row[0]}: {row[1]} countries")
 
     conn.close()
     print(f"\nDone!")
+
 
 if __name__ == "__main__":
     main()

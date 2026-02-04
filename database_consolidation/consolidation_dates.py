@@ -27,7 +27,13 @@ from tqdm import tqdm
 # Paths
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-DB_PATH = PROJECT_ROOT / "wikidata_sparql_scripts" / "instance_properties" / "output" / "instance_properties.db"
+DB_PATH = (
+    PROJECT_ROOT
+    / "wikidata_sparql_scripts"
+    / "instance_properties"
+    / "output"
+    / "instance_properties.db"
+)
 
 # Date fields in priority order
 DATE_FIELDS_PRIORITY = [
@@ -77,7 +83,8 @@ def setup_consolidation_rules_table(conn):
     """Create consolidation_rules table to track rules used."""
     cursor = conn.cursor()
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS consolidation_rules (
             consolidation_id TEXT PRIMARY KEY,
             rule_name TEXT,
@@ -86,7 +93,8 @@ def setup_consolidation_rules_table(conn):
             priority_fields TEXT,
             created_at TEXT
         )
-    """)
+    """
+    )
     conn.commit()
     print("Created/verified consolidation_rules table")
 
@@ -99,26 +107,34 @@ def register_consolidation_rule(conn) -> str:
     consolidation_id = CONSOLIDATION_RULE_NAME
 
     # Check if rule already exists
-    cursor.execute("SELECT consolidation_id FROM consolidation_rules WHERE consolidation_id = ?", (consolidation_id,))
+    cursor.execute(
+        "SELECT consolidation_id FROM consolidation_rules WHERE consolidation_id = ?",
+        (consolidation_id,),
+    )
     existing = cursor.fetchone()
 
-    priority_fields_json = json.dumps([
-        {"field": field, "description": desc, "priority": i + 1}
-        for i, (field, desc) in enumerate(DATE_FIELDS_PRIORITY)
-    ])
+    priority_fields_json = json.dumps(
+        [
+            {"field": field, "description": desc, "priority": i + 1}
+            for i, (field, desc) in enumerate(DATE_FIELDS_PRIORITY)
+        ]
+    )
 
     if not existing:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO consolidation_rules (consolidation_id, rule_name, rule_type, description, priority_fields, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            consolidation_id,
-            CONSOLIDATION_RULE_NAME,
-            "priority",
-            CONSOLIDATION_RULE_DESCRIPTION,
-            priority_fields_json,
-            datetime.now().isoformat()
-        ))
+        """,
+            (
+                consolidation_id,
+                CONSOLIDATION_RULE_NAME,
+                "priority",
+                CONSOLIDATION_RULE_DESCRIPTION,
+                priority_fields_json,
+                datetime.now().isoformat(),
+            ),
+        )
         conn.commit()
         print(f"Registered consolidation rule: {CONSOLIDATION_RULE_NAME}")
     else:
@@ -134,7 +150,8 @@ def create_consolidated_table(conn):
     # Drop and recreate the table
     cursor.execute("DROP TABLE IF EXISTS prop_DATE_consolidated")
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE prop_DATE_consolidated (
             instance_id TEXT PRIMARY KEY,
             instance_label TEXT,
@@ -142,7 +159,8 @@ def create_consolidated_table(conn):
             source_field TEXT,
             consolidation_id TEXT
         )
-    """)
+    """
+    )
 
     conn.commit()
     print("Created table: prop_DATE_consolidated")
@@ -169,10 +187,12 @@ def consolidate_dates(conn, consolidation_id: str):
 
     # Get all records
     print("\nLoading records from database...")
-    cursor.execute(f"""
+    cursor.execute(
+        f"""
         SELECT instance_id, instance_label, {fields_str}
         FROM instances_properties
-    """)
+    """
+    )
     rows = cursor.fetchall()
     print(f"Found {len(rows):,} records")
 
@@ -204,17 +224,22 @@ def consolidate_dates(conn, consolidation_id: str):
         if year is None:
             no_date_count += 1
 
-        inserts.append((instance_id, instance_label, year, source_field, consolidation_id))
+        inserts.append(
+            (instance_id, instance_label, year, source_field, consolidation_id)
+        )
 
     # Insert into consolidated table
     print("\nInserting into prop_DATE_consolidated...")
     batch_size = 10000
     for i in tqdm(range(0, len(inserts), batch_size), desc="Writing"):
-        batch = inserts[i:i + batch_size]
-        cursor.executemany("""
+        batch = inserts[i : i + batch_size]
+        cursor.executemany(
+            """
             INSERT INTO prop_DATE_consolidated (instance_id, instance_label, year, source_field, consolidation_id)
             VALUES (?, ?, ?, ?, ?)
-        """, batch)
+        """,
+            batch,
+        )
         conn.commit()
 
     # Statistics
@@ -231,7 +256,9 @@ def consolidate_dates(conn, consolidation_id: str):
     cursor.execute("SELECT COUNT(*) FROM prop_DATE_consolidated WHERE year < 0")
     bc_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT MIN(year), MAX(year) FROM prop_DATE_consolidated WHERE year IS NOT NULL")
+    cursor.execute(
+        "SELECT MIN(year), MAX(year) FROM prop_DATE_consolidated WHERE year IS NOT NULL"
+    )
     min_year, max_year = cursor.fetchone()
 
     print(f"Total records: {total:,}")
@@ -248,13 +275,15 @@ def consolidate_dates(conn, consolidation_id: str):
             print(f"  - {field}: {count:,} ({pct:.1f}%)")
 
     # Sample BC dates
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT instance_id, instance_label, year, source_field
         FROM prop_DATE_consolidated
         WHERE year < 0
         ORDER BY year
         LIMIT 5
-    """)
+    """
+    )
     bc_samples = cursor.fetchall()
     if bc_samples:
         print("\nSample BC dates:")
@@ -262,13 +291,15 @@ def consolidate_dates(conn, consolidation_id: str):
             print(f"  - {row[1]} ({row[0]}): {row[2]} (from {row[3]})")
 
     # Sample recent dates
-    cursor.execute("""
+    cursor.execute(
+        """
         SELECT instance_id, instance_label, year, source_field
         FROM prop_DATE_consolidated
         WHERE year > 2000
         ORDER BY year DESC
         LIMIT 5
-    """)
+    """
+    )
     recent_samples = cursor.fetchall()
     if recent_samples:
         print("\nSample recent dates:")
