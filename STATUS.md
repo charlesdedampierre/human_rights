@@ -1,7 +1,7 @@
 # Project Status
 
 **Last updated:** 2025-02-04
-**Last session:** Updated README with correct project structure and added re-orientation system
+**Last session:** Reorganized project structure, explored regional data distribution
 
 ---
 
@@ -13,26 +13,26 @@
 | Country enrichment | Complete | AI-powered mapping |
 | Language enrichment | Complete | AI-powered mapping |
 | Region mapping | Complete | World regions added |
-| Full text extraction | Not started | Pipeline ready |
-| Analysis | In progress | Regional analysis notebook |
+| Full text extraction | In progress | Some texts extracted |
+| Regional analysis | In progress | Exploring data distribution |
 
 ---
 
 ## Where I Left Off
 
-- Reorganized project documentation
-- Created re-orientation system (STATUS.md, SESSIONS.md, pipeline diagram)
+- Exploring data distribution by region/time in `analysis/analysis_regions.ipynb`
+- Noticed data quality issues that need attention
 
 ---
 
 ## Next Steps
 
-1. [ ] ...
-2. [ ] ...
-3. [ ] ...
+1. [ ] Continue regional analysis - explore distribution patterns
+2. [ ] Review and clean data quality issues in database
+3. [ ] Document findings from regional analysis
 
 ---
 
 ## Blockers / Issues
 
-- None currently
+- **Data quality issues**: Some entries in database may have missing or incorrect data (needs investigation)
